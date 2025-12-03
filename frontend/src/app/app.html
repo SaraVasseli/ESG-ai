@@ -1,0 +1,219 @@
+<div class="root">
+  <header class="header">
+    <h1>ESG-ai</h1>
+    <p class="subtitle">
+      AI-assisted ESG disclosure generator (Angular 17 + FastAPI + LLM).
+    </p>
+  </header>
+
+  <main class="grid">
+    <!-- LEFT: FORM -->
+    <mat-card class="card form-card">
+      <mat-card-header>
+        <mat-card-title>Input ESG data</mat-card-title>
+        <mat-card-subtitle>Provide key ESG context & metrics</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <form [formGroup]="form" (ngSubmit)="submit()" class="form">
+          <!-- Company -->
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Company name</mat-label>
+            <input matInput formControlName="company_name" />
+          </mat-form-field>
+
+          <!-- Sector + Year -->
+          <div class="two-cols">
+            <mat-form-field appearance="outline">
+              <mat-label>Sector</mat-label>
+              <input matInput formControlName="sector" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Year</mat-label>
+              <input matInput type="number" formControlName="year" />
+            </mat-form-field>
+          </div>
+
+          <!-- Tone -->
+          <section class="section">
+            <label class="section-label">Tone</label>
+            <mat-radio-group
+              color="primary"
+              formControlName="tone"
+              class="radio-group"
+            >
+              <mat-radio-button value="regulatory">
+                Regulatory / formal
+              </mat-radio-button>
+              <mat-radio-button value="investor_friendly">
+                Investor-friendly
+              </mat-radio-button>
+            </mat-radio-group>
+          </section>
+
+          <!-- Frameworks -->
+          <section class="section">
+            <label class="section-label">Frameworks</label>
+            <div class="frameworks" formGroupName="frameworks">
+              @for (fw of frameworksList; track fw) {
+                <mat-checkbox color="primary" [formControlName]="fw">
+                  {{ fw }}
+                </mat-checkbox>
+              }
+            </div>
+          </section>
+
+          <!-- Initiatives -->
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Initiatives & highlights</mat-label>
+            <textarea
+              matInput
+              rows="4"
+              formControlName="initiatives"
+            ></textarea>
+          </mat-form-field>
+
+          <!-- Metrics -->
+          <section class="section">
+            <div class="section-header">
+              <label class="section-label">Metrics</label>
+              <button
+                mat-stroked-button
+                color="primary"
+                type="button"
+                (click)="addMetric()"
+              >
+                + Add metric
+              </button>
+            </div>
+
+            <div formArrayName="metrics" class="metrics">
+              @for (metricCtrl of metrics.controls; track metricCtrl; let i = $index) {
+                <div class="metric-row" [formGroupName]="i">
+                  <mat-form-field appearance="outline" class="metric-name">
+                    <mat-label>Metric</mat-label>
+                    <input matInput placeholder="Scope 1 emissions" formControlName="name" />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="metric-value">
+                    <mat-label>Value</mat-label>
+                    <input matInput placeholder="12000" formControlName="value" />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="metric-unit">
+                    <mat-label>Unit</mat-label>
+                    <input matInput placeholder="tCO2e, %, etc." formControlName="unit" />
+                  </mat-form-field>
+
+                  @if (metrics.length > 1) {
+                    <button
+                      mat-icon-button
+                      type="button"
+                      aria-label="Remove metric"
+                      (click)="removeMetric(i)"
+                    >
+                      ✕
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          </section>
+
+          <!-- Actions -->
+          <div class="actions">
+            <button
+              mat-raised-button
+              color="primary"
+              type="submit"
+              [disabled]="loading()"
+            >
+              {{ loading() ? 'Generating…' : 'Generate ESG disclosure' }}
+            </button>
+
+            @if (loading()) {
+              <mat-progress-spinner
+                diameter="24"
+                mode="indeterminate"
+              ></mat-progress-spinner>
+            }
+          </div>
+
+          @if (errorMessage()) {
+            <p class="error">{{ errorMessage() }}</p>
+          }
+        </form>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- RIGHT: RESULT + HISTORY -->
+    <mat-card class="card result-card">
+      <mat-card-header>
+        <mat-card-title>Generated disclosure</mat-card-title>
+        <mat-card-subtitle>AI-generated ESG narrative & insights</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        @if (!result() && !loading()) {
+          <p class="empty-state">
+            Fill in the form on the left and click
+            <strong>Generate ESG disclosure</strong> to see the output here.
+          </p>
+        }
+
+        @if (result()) {
+          <section class="result">
+            <h3>Disclosure</h3>
+            <pre class="disclosure">{{ result()!.disclosure_text }}</pre>
+
+            @if (result()!.improvement_suggestions.length) {
+              <h3>Suggestions for improvement</h3>
+              <ul class="suggestions">
+                @for (s of result()!.improvement_suggestions; track s) {
+                  <li>{{ s }}</li>
+                }
+              </ul>
+            }
+
+            @if (result()!.total_tokens !== undefined) {
+              <div class="usage">
+                <small>
+                  Model: {{ result()!.model || 'n/a' }} –
+                  Prompt: {{ result()!.prompt_tokens ?? 'n/a' }} tokens –
+                  Completion: {{ result()!.completion_tokens ?? 'n/a' }} tokens –
+                  Total: {{ result()!.total_tokens ?? 'n/a' }} tokens
+                </small>
+              </div>
+            }
+          </section>
+        }
+
+        <section class="history">
+          <h3>Recent runs</h3>
+          <div class="history-list">
+            @for (item of historyItems(); track item.id) {
+              <div class="history-item">
+                <div class="history-header">
+                  <div>
+                    <strong>{{ item.company_name }}</strong>
+                    <span class="year">({{ item.year }})</span>
+                  </div>
+                  <small>{{ item.created_at | date: 'short' }}</small>
+                </div>
+                <div class="frameworks">
+                  {{
+                    item.frameworks.length
+                      ? item.frameworks.join(', ')
+                      : 'No framework'
+                  }}
+                </div>
+                <p class="preview">{{ item.disclosure_preview }}</p>
+              </div>
+            }
+          </div>
+        </section>
+      </mat-card-content>
+    </mat-card>
+  </main>
+</div>
